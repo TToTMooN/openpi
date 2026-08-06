@@ -48,6 +48,7 @@ def get_hub_configs():
                             "observation/right_wrist_image": "observation.images.right_head",
                             "state": "observation.state",
                             "actions": "action",
+                            "prompt": "prompt",
                         }
                     )
                 ]
