@@ -1,4 +1,4 @@
-"""vlaforge hub configs — additive registration of profile-driven TrainConfigs.
+"""vlahub hub configs — additive registration of profile-driven TrainConfigs.
 
 Spliced into `_CONFIGS` via one line in config.py (the roboarena/polaris
 pattern; imports are deferred into the function to avoid circular imports).
@@ -18,7 +18,7 @@ import openpi.models.pi0_config as pi0_config
 import openpi.policies.hub_ee_policy as hub_ee_policy
 from openpi.training.weight_loaders import CheckpointWeightLoader
 
-_HUB_EE_REPO_ID = "vlaforge/cardboard_box_tcp_curated_10s_ee_rel"
+_HUB_EE_REPO_ID = "vlahub/cardboard_box_tcp_curated_10s_ee_rel"
 _PI05_BASE = "gs://openpi-assets/checkpoints/pi05_base/params"
 
 
@@ -34,7 +34,7 @@ def get_hub_configs():
     class LeRobotHubEEDataConfig(DataConfigFactory):
         """EE-rel (chunk-anchored SE(3), rot6d rows) profile over a LeRobot
         dataset whose state/action are absolute [xyz, rot6d, grip] per arm
-        (20-dim bimanual, produced by vlaforge's teleop_ee adapter)."""
+        (20-dim bimanual, produced by vlahub's teleop_ee adapter)."""
 
         default_prompt: str | None = None
 
