@@ -35,6 +35,12 @@ class HubEEInputs(transforms.DataTransformFn):
     model_type: _model.ModelType = _model.ModelType.PI05
     add_inter_gripper_pose: bool = True
     layout: tuple = transforms_se3.DUAL_ARM_EE_LAYOUT_20
+    # This rig has no exterior camera. A masked zero-image is excluded from
+    # attention, so OMITTING the slot entirely is mathematically equivalent and
+    # skips its SigLIP pass + dead attention width (~1/3 of vision compute).
+    # True restores the padded 3-slot form (needed for pi0-FAST, which does not
+    # mask padding images).
+    include_masked_base: bool = False
 
     def __call__(self, data: dict) -> dict:
         state = np.asarray(data["state"], dtype=np.float64)
@@ -44,20 +50,18 @@ class HubEEInputs(transforms.DataTransformFn):
         left = _parse_image(data["observation/left_wrist_image"])
         right = _parse_image(data["observation/right_wrist_image"])
 
+        images = {"left_wrist_0_rgb": left, "right_wrist_0_rgb": right}
+        masks = {"left_wrist_0_rgb": np.True_, "right_wrist_0_rgb": np.True_}
+        if self.include_masked_base or self.model_type == _model.ModelType.PI0_FAST:
+            images["base_0_rgb"] = np.zeros_like(left)
+            masks["base_0_rgb"] = (
+                np.True_ if self.model_type == _model.ModelType.PI0_FAST else np.False_
+            )
+
         inputs = {
             "state": state,
-            "image": {
-                "base_0_rgb": np.zeros_like(left),
-                "left_wrist_0_rgb": left,
-                "right_wrist_0_rgb": right,
-            },
-            "image_mask": {
-                # No exterior camera on this rig; mask the padding slot for
-                # flow-matching models (do not mask for pi0-FAST).
-                "base_0_rgb": np.True_ if self.model_type == _model.ModelType.PI0_FAST else np.False_,
-                "left_wrist_0_rgb": np.True_,
-                "right_wrist_0_rgb": np.True_,
-            },
+            "image": images,
+            "image_mask": masks,
         }
         if "actions" in data:
             inputs["actions"] = np.asarray(data["actions"], dtype=np.float64)

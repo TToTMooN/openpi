@@ -51,6 +51,11 @@ class Args:
     # Record the policy's behavior for debugging.
     record: bool = False
 
+    # Flow-matching denoise steps (vla-hub addition). None keeps the model
+    # default (10). PI's RTC paper deployed 5; measured deviation at 5 is
+    # negligible vs policy error.
+    num_steps: int | None = None
+
     # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
     policy: Checkpoint | Default = dataclasses.field(default_factory=Default)
 
@@ -87,10 +92,14 @@ def create_default_policy(env: EnvMode, *, default_prompt: str | None = None) ->
 
 def create_policy(args: Args) -> _policy.Policy:
     """Create a policy from the given arguments."""
+    sample_kwargs = {"num_steps": args.num_steps} if args.num_steps is not None else None
     match args.policy:
         case Checkpoint():
             return _policy_config.create_trained_policy(
-                _config.get_config(args.policy.config), args.policy.dir, default_prompt=args.default_prompt
+                _config.get_config(args.policy.config),
+                args.policy.dir,
+                default_prompt=args.default_prompt,
+                sample_kwargs=sample_kwargs,
             )
         case Default():
             return create_default_policy(args.env, default_prompt=args.default_prompt)

@@ -153,13 +153,17 @@ def preprocess_observation(
     filling in a default image mask (if necessary).
     """
 
-    if not set(image_keys).issubset(observation.images):
-        raise ValueError(f"images dict missing keys: expected {image_keys}, got {list(observation.images)}")
+    # vla-hub: absent slots are allowed (a masked zero-image is attention-excluded
+    # anyway, so omitting it upstream of SigLIP is mathematically equivalent and
+    # skips its compute). Behavior is unchanged whenever all keys are provided.
+    present_keys = [k for k in image_keys if k in observation.images]
+    if not present_keys:
+        raise ValueError(f"images dict has none of the expected keys {image_keys}: got {list(observation.images)}")
 
     batch_shape = observation.state.shape[:-1]
 
     out_images = {}
-    for key in image_keys:
+    for key in present_keys:
         image = observation.images[key]
         if image.shape[1:3] != image_resolution:
             logger.info(f"Resizing image {key} from {image.shape[1:3]} to {image_resolution}")
