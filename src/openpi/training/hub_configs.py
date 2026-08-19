@@ -136,6 +136,11 @@ def get_hub_configs():
             weight_loader=CheckpointWeightLoader(_PI05_BASE),
             num_train_steps=20_000,
             batch_size=32,
+            # ~52GB per checkpoint: default 1000-step saves with keep_period
+            # 5000 transiently held ~390GB on the trainer disk. 2000/10000
+            # bounds steady-state at latest + {10k, 20k} ≈ 156GB.
+            save_interval=2_000,
+            keep_period=10_000,
         ),
         # Legacy serving config for pre-flip checkpoints (absolute pose in the
         # state, 29-dim stats). Never train this — it exists so old checkpoints
