@@ -37,6 +37,12 @@ def get_hub_configs():
         (20-dim bimanual, produced by vlahub's teleop_ee adapter)."""
 
         default_prompt: str | None = None
+        # "ee_pose_gripper" (historical, absolute pose in state) or
+        # "rel_ee_history" (UMI-correct: pose slots carry the past pose in the
+        # current frame; obs never contain absolute pose). Must match the hub
+        # profile's repspec.state.mode.
+        state_mode: str = "ee_pose_gripper"
+        state_history_stride: int = 5  # frames; ~167 ms at 30 fps (UMI ~150 ms)
 
         @override
         def create(self, assets_dirs, model_config: _model.BaseModelConfig) -> DataConfig:
@@ -57,7 +63,8 @@ def get_hub_configs():
             data_transforms = _transforms.Group(
                 inputs=[
                     hub_ee_policy.HubEEInputs(
-                        action_dim=model_config.action_dim, model_type=model_config.model_type
+                        action_dim=model_config.action_dim, model_type=model_config.model_type,
+                        state_mode=self.state_mode,
                     )
                 ],
                 outputs=[hub_ee_policy.HubEEOutputs()],
@@ -79,6 +86,10 @@ def get_hub_configs():
                 data_transforms=data_transforms,
                 model_transforms=model_transforms,
                 action_sequence_keys=("action",),
+                state_history_frames=(
+                    (-self.state_history_stride, 0)
+                    if self.state_mode == "rel_ee_history" else None
+                ),
             )
 
     lora_model = pi0_config.Pi0Config(
@@ -97,6 +108,11 @@ def get_hub_configs():
                 repo_id=_HUB_EE_REPO_ID,
                 assets=AssetsConfig(),
                 base_config=DataConfig(prompt_from_task=True),
+                # UMI-correct state (profile v2, repspec rel_ee_history):
+                # frame-invariant obs — past-in-current pose slots + inter-
+                # gripper + past widths. Checkpoints trained pre-flip keep
+                # working: their frozen repspec routes the old serving path.
+                state_mode="rel_ee_history",
             ),
             weight_loader=CheckpointWeightLoader(_PI05_BASE),
             num_train_steps=20_000,

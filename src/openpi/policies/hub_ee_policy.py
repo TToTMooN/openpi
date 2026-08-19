@@ -42,9 +42,28 @@ class HubEEInputs(transforms.DataTransformFn):
     # mask padding images).
     include_masked_base: bool = False
 
+    # "ee_pose_gripper" (historical, absolute pose slots) or "rel_ee_history"
+    # (UMI-correct: pose slots carry the past pose in the current frame; obs
+    # never contain absolute pose). Train time delivers a stacked
+    # [past, current] state via the loader's state-history timestamps; serve
+    # time delivers the current state + obs["state_history"] on the wire
+    # (missing history degrades to identity motion).
+    state_mode: str = "ee_pose_gripper"
+
     def __call__(self, data: dict) -> dict:
         state = np.asarray(data["state"], dtype=np.float64)
-        if self.add_inter_gripper_pose:
+        past = None
+        if state.ndim == 2:  # stacked [past, current] (training loader)
+            past, state = state[0], state[-1]
+        elif "state_history" in data and data["state_history"] is not None:
+            hist = np.asarray(data["state_history"], dtype=np.float64)
+            past = np.atleast_2d(hist)[0]
+        anchor = state.copy()
+        if self.state_mode == "rel_ee_history":
+            if past is None:
+                past = state  # identity motion — degrade, never crash
+            state = transforms_se3.rel_history_state(state, past, self.layout)
+        elif self.add_inter_gripper_pose:
             state = transforms_se3.append_inter_gripper_pose(state, self.layout)
 
         left = _parse_image(data["observation/left_wrist_image"])
@@ -60,6 +79,9 @@ class HubEEInputs(transforms.DataTransformFn):
 
         inputs = {
             "state": state,
+            # absolute native anchor for the SE(3) action transforms — in
+            # rel_ee_history mode the state slots no longer carry it
+            "state_anchor": anchor,
             "image": images,
             "image_mask": masks,
         }

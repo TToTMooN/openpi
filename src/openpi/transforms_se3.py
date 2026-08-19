@@ -120,7 +120,11 @@ class RigidBodyDeltaActions:
     def __call__(self, data: dict) -> dict:
         if "actions" not in data:
             return data
-        state = np.asarray(data["state"], dtype=np.float64)
+        # rel_ee_history mode relativizes the state SLOTS — the absolute SE(3)
+        # anchor then travels as `state_anchor` (stashed by HubEEInputs).
+        state = np.asarray(data.get("state_anchor", data["state"]), dtype=np.float64)
+        if state.ndim == 2:  # stacked [past, current] from state-history loading
+            state = state[-1]
         actions = np.array(data["actions"], dtype=np.float64, copy=True)
         for entry in self.layout:
             if entry["kind"] != "pose6d":
@@ -143,7 +147,11 @@ class RigidBodyAbsoluteActions:
     def __call__(self, data: dict) -> dict:
         if "actions" not in data:
             return data
-        state = np.asarray(data["state"], dtype=np.float64)
+        # rel_ee_history mode relativizes the state SLOTS — the absolute SE(3)
+        # anchor then travels as `state_anchor` (stashed by HubEEInputs).
+        state = np.asarray(data.get("state_anchor", data["state"]), dtype=np.float64)
+        if state.ndim == 2:  # stacked [past, current] from state-history loading
+            state = state[-1]
         actions = np.array(data["actions"], dtype=np.float64, copy=True)
         for entry in self.layout:
             if entry["kind"] != "pose6d":
@@ -158,6 +166,30 @@ class RigidBodyAbsoluteActions:
 
 
 # -- state extras (vendored mirror of vlaforge.staterep) ----------------------
+
+
+def rel_history_state(
+    state: np.ndarray, state_past: np.ndarray, layout: Sequence[dict[str, Any]]
+) -> np.ndarray:
+    """UMI-correct model state (frame-invariant; mirror of vlaforge.staterep
+    rel_ee_history — parity-tested): the pose SLOTS carry the PAST pose in the
+    CURRENT frame, T_t^-1 T_past (latest = identity), gripper slots keep the
+    current width; inter-gripper (from current absolutes) appends; then each
+    arm's PAST gripper width. Observations must never contain absolute pose —
+    the UMI/SLAM map frame is arbitrary per session."""
+    state = np.asarray(state, dtype=np.float64)
+    past = np.asarray(state_past, dtype=np.float64)
+    with_ig = append_inter_gripper_pose(state, layout)
+    out = with_ig.copy()
+    past_widths = []
+    for entry in layout:
+        if entry["kind"] == "pose6d":
+            T_cur = pose9_to_mat(_group_pose9(state, entry))
+            T_past = pose9_to_mat(_group_pose9(past, entry))
+            _write_pose9(out, entry, mat_to_pose9(se3_inv(T_cur) @ T_past))
+        elif entry["kind"] == "scalar_abs":
+            past_widths.append(past[..., entry["idx"] : entry["idx"] + 1])
+    return np.concatenate([out, *past_widths], axis=-1)
 
 
 def append_inter_gripper_pose(state: np.ndarray, layout: Sequence[dict[str, Any]]) -> np.ndarray:

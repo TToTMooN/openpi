@@ -7,9 +7,13 @@ hub drives, not the place hub features live).
 
 ## Hub-branch rules
 
-- **Additive files only** (upstream rebases must stay trivial). The one
-  allowed edit: the 2-line `hub_configs` splice in
-  `src/openpi/training/config.py` (roboarena/polaris pattern).
+- **Additive files only** (upstream rebases must stay trivial). Allowed
+  upstream-file edits (keep them tiny; each is flagged inline):
+  `src/openpi/training/config.py` (2-line hub_configs splice + the
+  `state_history_frames` DataConfig field), `src/openpi/models/model.py`
+  (masked-camera skip), `scripts/serve_policy.py` (`--num-steps`),
+  `src/openpi/training/data_loader.py` (guarded state-history
+  delta_timestamps for rel_ee_history profiles).
 - Hub files: `src/openpi/transforms_se3.py` (SE(3) chunk-relative EE
   transforms, pure numpy, NO openpi/jax imports — it is a VENDORED copy of
   vla-hub's geometry, parity-tested from vla-hub's test suite; keep them in
