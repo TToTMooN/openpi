@@ -113,6 +113,7 @@ def get_hub_configs():
     lora_model = pi0_config.Pi0Config(
         pi05=True,
         action_horizon=24,
+        max_token_len=160,
         paligemma_variant="gemma_2b_lora",
         action_expert_variant="gemma_300m_lora",
     )
@@ -121,7 +122,12 @@ def get_hub_configs():
         # Full finetune — needs ~70GB+ (A100-80G/H100) or fsdp_devices.
         TrainConfig(
             name="hub_portable_bimanual_ee",
-            model=pi0_config.Pi0Config(pi05=True, action_horizon=24),
+            # max_token_len 160 (default 200): our task strings tokenize well
+            # under 160, and the dead pad tokens run through the 2B trunk every
+            # step (~4-5% wall). Pads are attention-masked so this is inert;
+            # the tokenizer warns in the log if a prompt ever hits the cap.
+            # Legacy _v1 keeps 200 — serve old checkpoints exactly as trained.
+            model=pi0_config.Pi0Config(pi05=True, action_horizon=24, max_token_len=160),
             data=LeRobotHubEEDataConfig(
                 repo_id=_HUB_EE_REPO_ID,
                 assets=AssetsConfig(),
