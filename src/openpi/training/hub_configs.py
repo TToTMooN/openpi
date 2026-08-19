@@ -80,8 +80,26 @@ def get_hub_configs():
                 model_config
             )
 
+            base = self.create_base_config(assets_dirs, model_config)
+            # Fail at construction, not first batch/infer: stats computed under
+            # the other state_mode (pre-flip checkpoint served under the rel
+            # config, or stale assets) would otherwise surface as a cryptic
+            # broadcast error deep in Normalize. Bimanual 20-dim native state:
+            # 29 = 20 + 9 inter-gripper; 31 = rel history layout (+2 past widths).
+            expected = 31 if self.state_mode == "rel_ee_history" else 29
+            if base.norm_stats is not None and "state" in base.norm_stats:
+                got = base.norm_stats["state"].mean.shape[-1]
+                if got != expected:
+                    raise ValueError(
+                        f"norm stats state dim {got} != {expected} expected for "
+                        f"state_mode={self.state_mode!r}. A 29-dim stats file under the "
+                        "rel config means a pre-flip checkpoint: serve it with config "
+                        "hub_portable_bimanual_ee_v1 (or re-run the hub pipeline to "
+                        "regenerate stats)."
+                    )
+
             return dataclasses.replace(
-                self.create_base_config(assets_dirs, model_config),
+                base,
                 repack_transforms=repack_transform,
                 data_transforms=data_transforms,
                 model_transforms=model_transforms,
@@ -110,9 +128,27 @@ def get_hub_configs():
                 base_config=DataConfig(prompt_from_task=True),
                 # UMI-correct state (profile v2, repspec rel_ee_history):
                 # frame-invariant obs — past-in-current pose slots + inter-
-                # gripper + past widths. Checkpoints trained pre-flip keep
-                # working: their frozen repspec routes the old serving path.
+                # gripper + past widths. Pre-flip checkpoints serve via
+                # hub_portable_bimanual_ee_v1 (vla-hub's serve path selects it
+                # from the checkpoint's shipped representation.json).
                 state_mode="rel_ee_history",
+            ),
+            weight_loader=CheckpointWeightLoader(_PI05_BASE),
+            num_train_steps=20_000,
+            batch_size=32,
+        ),
+        # Legacy serving config for pre-flip checkpoints (absolute pose in the
+        # state, 29-dim stats). Never train this — it exists so old checkpoints
+        # keep serving/evaluating after the production config moved to
+        # rel_ee_history under the same assets.
+        TrainConfig(
+            name="hub_portable_bimanual_ee_v1",
+            model=pi0_config.Pi0Config(pi05=True, action_horizon=24),
+            data=LeRobotHubEEDataConfig(
+                repo_id=_HUB_EE_REPO_ID,
+                assets=AssetsConfig(),
+                base_config=DataConfig(prompt_from_task=True),
+                state_mode="ee_pose_gripper",
             ),
             weight_loader=CheckpointWeightLoader(_PI05_BASE),
             num_train_steps=20_000,

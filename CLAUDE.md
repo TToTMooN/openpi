@@ -13,7 +13,10 @@ hub drives, not the place hub features live).
   `state_history_frames` DataConfig field), `src/openpi/models/model.py`
   (masked-camera skip), `scripts/serve_policy.py` (`--num-steps`),
   `src/openpi/training/data_loader.py` (guarded state-history
-  delta_timestamps for rel_ee_history profiles).
+  delta_timestamps for rel_ee_history profiles),
+  `src/openpi/policies/policy.py` (guarded `state_anchor` passthrough into
+  the infer outputs dict — without it RigidBodyAbsoluteActions anchors on
+  the rel-mode state and serves mis-anchored chunks).
 - Hub files: `src/openpi/transforms_se3.py` (SE(3) chunk-relative EE
   transforms, pure numpy, NO openpi/jax imports — it is a VENDORED copy of
   vla-hub's geometry, parity-tested from vla-hub's test suite; keep them in
